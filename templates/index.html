@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <title>ホーム - 日記アプリ</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/favicon.png') }}">
+    <style>
+        /* スマホ画面の余白を減らす */
+        @media (max-width: 576px) {
+            .card {
+                margin-left: 5px;
+                margin-right: 5px;
+                flex-direction: row;
+                /* 横並び */
+                align-items: center;
+                /* 垂直方向で中央揃え */
+            }
+
+            .card-body {
+                padding-left: 10px;
+            }
+        }
+
+        /* サムネイル用の画像・動画のスタイル */
+        .thumbnail {
+            width: 80px;
+            /* サムネイルの幅 */
+            height: 80px;
+            /* サムネイルの高さ */
+            object-fit: cover;
+            /* 枠内に収める */
+            border-radius: 5px;
+            /* 角を少し丸める */
+        }
+
+        /* カードの全体設定 */
+        .card {
+            height: auto;
+            /* 高さを自動調整 */
+            margin-bottom: 10px;
+            /* カード間の余白 */
+        }
+
+        /* コンテナの高さを画面全体に収める */
+        .container {
+            max-height: 100vh;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+
+<body>
+    <p>ログイン中のユーザー: {{ email }}</p>
+
+    <div class="container mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2>{{ year }}年</h2>
+            <a href="/add" class="btn btn-outline-primary">＋ 新しい日記</a>
+        </div>
+
+        <div class="row">
+            <div class="col-12">
+                {% for entry in entries %}
+                <div class="card d-flex flex-row">
+                    <!-- サムネイル画像または動画 -->
+                    {% if entry[3] and entry[3] != 'default.jpg' %}
+                    {% if entry[3].endswith('.mp4') %}
+                    <video class="thumbnail" controls muted>
+                        <source src="{{ url_for('uploaded_file', filename=entry[3]) }}" type="video/mp4">
+                        お使いのブラウザは動画タグに対応していません。
+                    </video>
+                    {% else %}
+                    <img src="{{ url_for('uploaded_file', filename=entry[3]) }}" class="thumbnail" alt="日記画像">
+                    {% endif %}
+                    {% else %}
+                    <img src="{{ url_for('static', filename='uploads/default.jpg') }}" class="thumbnail" alt="デフォルト画像">
+                    {% endif %}
+
+                    <div class="card-body">
+                        <h5 class="card-title">{{ entry[1] }}</h5>
+                        <p class="card-text text-truncate">{{ entry[2] }}</p>
+
+                        <div class="d-flex mt-2">
+                            <a href="{{ url_for('detail', entry_id=entry[0]) }}"
+                                class="btn btn-primary btn-sm me-1">詳細</a>
+                            <form id="delete-form-{{ entry[0] }}" action="{{ url_for('delete', entry_id=entry[0]) }}"
+                                method="POST" style="display: inline;">
+                                <button type="button" class="btn btn-outline-danger btn-sm"
+                                    onclick="confirmDelete('{{ entry[1] }}', {{ entry[0] }})">削除</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 削除確認ダイアログ
+        function confirmDelete(date, entryId) {
+            if (confirm(`${date}の日記を削除してもよろしいですか？`)) {
+                document.getElementById(`delete-form-${entryId}`).submit();
+            }
+        }
+    </script>
+
+</body>
+
+</html>

@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <title>登録/編集 - 日記アプリ</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .thumbnail {
+            width: 100px;
+            height: 100px;
+            object-fit: cover;
+            border-radius: 5px;
+            display: block;
+            margin-top: 10px;
+        }
+
+        /* スマホ画面の余白を減らす */
+        @media (max-width: 576px) {
+            .card {
+                margin-left: 5px;
+                margin-right: 5px;
+            }
+
+            .container {
+                padding-left: 5px;
+                padding-right: 5px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container mt-4">
+        <!-- 重複する日付がある場合、保存ボタン押下時にエラーメッセージを表示 -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="alert alert-danger" role="alert">
+            {{ messages[0][1] }}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <form method="POST" enctype="multipart/form-data">
+            <div class="mb-3">
+                <label for="date" class="form-label">日付</label>
+                <input type="date" class="form-control" name="date" value="{{ entry[1] if entry else today }}" required>
+            </div>
+            <div class="mb-3">
+                <label for="content" class="form-label">内容</label>
+                <textarea class="form-control" name="content" rows="3" required>{{ entry[2] if entry else '' }}</textarea>
+            </div>
+            <div class="mb-3">
+                <label for="file-input" class="form-label">画像または動画</label>
+
+                <!-- ボタンを横一行に並べる -->
+                <div class="d-flex">
+                    <label for="file-input" class="btn btn-outline-primary me-2">
+                        ファイルを選択
+                    </label>
+                    {% if entry and entry[3] %}
+                    <button type="button" class="btn btn-danger btn-sm" id="clear-file-btn" onclick="clearFileSelection()">
+                        画像選択を解除
+                    </button>
+                    {% endif %}
+                </div>
+
+                <input class="form-control" type="file" name="file" id="file-input" accept="image/*,video/*"
+                    style="display: none;" onchange="previewFile()">
+
+                <!-- ファイルが選択されていない場合に表示するメッセージ -->
+                <p id="file-message" style="color: red; display:none;">
+                    選択されていません
+                </p>
+
+                <!-- プレビューエリア -->
+                <div id="preview-area">
+                    {% if entry and entry[3] %}
+                    {% if entry[3].endswith('.mp4') %}
+                    <video class="thumbnail" controls muted>
+                        <source src="{{ url_for('uploaded_file', filename=entry[3]) }}" type="video/mp4">
+                        お使いのブラウザは動画タグに対応していません。
+                    </video>
+                    {% else %}
+                    <img src="{{ url_for('uploaded_file', filename=entry[3]) }}" class="thumbnail" alt="日記画像">
+                    {% endif %}
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- 保存ボタン -->
+            <button type="submit" class="btn btn-primary">保存</button>
+        </form>
+
+        <!-- 詳細画面に戻るボタン -->
+        <a href="{{ url_for('detail', entry_id=entry[0]) }}" class="btn btn-outline-secondary mt-5">&lt; 詳細画面に戻る</a>
+
+    </div>
+    <script>
+        // ファイルのプレビューを表示する関数
+        function previewFile() {
+            const input = document.getElementById('file-input');
+            const previewArea = document.getElementById('preview-area');
+            const fileMessage = document.getElementById('file-message'); // メッセージ要素の取得
+            const clearFileContainer = document.getElementById('clear-file-container'); // 解除ボタンのコンテナ
+
+            // プレビューエリアをクリア
+            previewArea.innerHTML = '';
+
+            if (input.files && input.files[0]) {
+                const file = input.files[0];
+                const fileUrl = URL.createObjectURL(file);
+
+                // 選択されているファイルのタイプに応じてプレビューを表示
+                if (file.type.startsWith('image/')) {
+                    const img = document.createElement('img');
+                    img.src = fileUrl;
+                    img.classList.add('thumbnail');
+                    previewArea.appendChild(img);
+                } else if (file.type.startsWith('video/')) {
+                    const video = document.createElement('video');
+                    video.src = fileUrl;
+                    video.controls = true;
+                    video.classList.add('thumbnail');
+                    previewArea.appendChild(video);
+                }
+
+                // ファイルが選択されているので、メッセージを非表示にする
+                fileMessage.style.display = 'none';
+
+                // 解除ボタンを表示
+                if (clearFileContainer) {
+                    clearFileContainer.style.display = 'block';
+                }
+            } else {
+                // ファイルが選択されていない場合のメッセージ表示
+                fileMessage.style.display = 'block';
+
+                // 解除ボタンを非表示にする
+                if (clearFileContainer) {
+                    clearFileContainer.style.display = 'none';
+                }
+            }
+        }
+
+        // 画像や動画の選択を解除する関数
+        function clearFileSelection() {
+            const input = document.getElementById('file-input');
+            const previewArea = document.getElementById('preview-area');
+            const fileMessage = document.getElementById('file-message'); // メッセージ要素の取得
+            const clearFileContainer = document.getElementById('clear-file-container'); // 解除ボタンのコンテナ
+
+            // ファイル選択をクリア
+            input.value = '';
+
+            // プレビューエリアをクリア
+            previewArea.innerHTML = '';
+
+            // 「選択されていません」メッセージを表示
+            fileMessage.style.display = 'block';
+
+            // 解除ボタンを非表示にする
+            clearFileContainer.style.display = 'none';
+        }
+    </script>
+</body>
+
+</html>
