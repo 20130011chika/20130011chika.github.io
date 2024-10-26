@@ -5,7 +5,6 @@
     <title>詳細 - 日記アプリ</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        
         .thumbnail {
             width: 100px;
             height: 100px;
@@ -36,6 +35,7 @@
         <!-- ファイルが存在する場合にサムネイルを表示 -->
         {% if entry[3] and entry[3] != 'default.jpg' %}
         <div class="mb-3">
+
             {% if entry[3].endswith('.mp4') %}
             <!-- 動画の場合 -->
             <video class="thumbnail" controls>
@@ -54,8 +54,21 @@
 
 
         <div class="mt-3 d-flex">
-            <a href="/edit/{{ entry[0] }}" class="btn btn-secondary me-2">編集</a>
-            <a href="/" class="btn btn-outline-danger">削除</a>
+            {% if use_cgi %}
+                <!-- サーバー環境: index.cgiを含むURLを生成 -->
+                <a href="{{ url_for('edit', entry_id=entry[0], _external=True).replace('tani-chika.com/', 'tani-chika.com/index.cgi/') }}" class="btn btn-secondary me-2">編集</a>
+            {% else %}
+                <!-- ローカル環境: 通常のURLを生成 -->
+                <a href="{{ url_for('edit', entry_id=entry[0]) }}" class="btn btn-secondary me-1">編集</a>
+            {% endif %}
+        
+            <!-- 削除ボタンを追加 -->
+            <form action="{{ url_for('delete', entry_id=entry[0]) }}" method="POST"
+                onsubmit="return confirm('本当にこの日記を削除してよろしいですか？');">
+                <button type="submit" class="btn btn-outline-danger me-1"
+                onclick="confirmDelete('{{ entry[1] }}', {{ entry[0] }})">削除</button>
+            </form>
+
         </div>
 
         <!-- ホームに戻るボタン -->

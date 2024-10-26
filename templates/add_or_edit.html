@@ -40,17 +40,20 @@
         {% endif %}
         {% endwith %}
 
-        <form method="POST" enctype="multipart/form-data">
+        <form method="POST" action="{% if entry %}{{ url_for('edit', entry_id=entry[0]) }}{% else %}{{ url_for('add') }}{% endif %}" enctype="multipart/form-data">
             <div class="mb-3">
                 <label for="date" class="form-label">日付</label>
                 <input type="date" class="form-control" name="date" value="{{ entry[1] if entry else today }}" required>
             </div>
             <div class="mb-3">
                 <label for="content" class="form-label">内容</label>
-                <textarea class="form-control" name="content" rows="3" required>{{ entry[2] if entry else '' }}</textarea>
+                <textarea class="form-control" name="content" rows="3"
+                    required>{{ entry[2] if entry else '' }}</textarea>
             </div>
             <div class="mb-3">
                 <label for="file-input" class="form-label">画像または動画</label>
+                <input class="form-control" type="file" name="file" id="file-input" accept="image/*,video/*"
+                    style="display: none;" onchange="previewFile()">
 
                 <!-- ボタンを横一行に並べる -->
                 <div class="d-flex">
@@ -58,15 +61,12 @@
                         ファイルを選択
                     </label>
                     {% if entry and entry[3] %}
-                    <button type="button" class="btn btn-danger btn-sm" id="clear-file-btn" onclick="clearFileSelection()">
+                    <button type="button" class="btn btn-danger btn-sm" id="clear-file-btn"
+                        onclick="clearFileSelection()">
                         画像選択を解除
                     </button>
                     {% endif %}
                 </div>
-
-                <input class="form-control" type="file" name="file" id="file-input" accept="image/*,video/*"
-                    style="display: none;" onchange="previewFile()">
-
                 <!-- ファイルが選択されていない場合に表示するメッセージ -->
                 <p id="file-message" style="color: red; display:none;">
                     選択されていません
@@ -91,8 +91,15 @@
             <button type="submit" class="btn btn-primary">保存</button>
         </form>
 
-        <!-- 詳細画面に戻るボタン -->
+        <!-- 新規作成時にはホーム画面に戻るボタンを表示 -->
+        {% if not entry %}
+        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary mt-5">ホーム画面に戻る</a>
+        {% endif %}
+
+        <!-- 編集の場合のみ詳細画面に戻るボタンを表示 -->
+        {% if entry %}
         <a href="{{ url_for('detail', entry_id=entry[0]) }}" class="btn btn-outline-secondary mt-5">&lt; 詳細画面に戻る</a>
+        {% endif %}
 
     </div>
     <script>
