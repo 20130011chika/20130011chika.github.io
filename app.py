@@ -11,6 +11,11 @@ from datetime import datetime
 import os
 from werkzeug.utils import secure_filename
 import sqlite3
+import logging
+
+# ロギングの設定
+logging.basicConfig(level=logging.DEBUG)  # DEBUGレベルのログを表示する
+logger = logging.getLogger(__name__)
 
 # Flaskアプリケーションのインスタンスを作成
 app = Flask(__name__)
@@ -147,10 +152,24 @@ def detail(entry_id):
 @app.route("/edit/<int:entry_id>", methods=["GET", "POST"])
 def edit(entry_id):
     if request.method == "POST":
+        # POSTデータ全体のログ出力
+        print(f"受信したPOSTデータ: {request.form}")
+
         # フォームからのデータを取得
         date = request.form["date"]
         content = request.form["content"]
         file = request.files.get("file")  # 画像または動画ファイル
+        file_cleared = request.form.get("file_cleared")  # ファイルクリアフラグを取得
+
+        # ログ出力
+        logger.debug("==== DEBUG START ====")
+        logger.debug(f"POSTリクエスト受信: entry_id={entry_id}")
+        logger.debug(f"file_clearedの値: {file_cleared}")
+        logger.debug(f"fileの内容: {file}")  # ファイルの有無を確認
+        logger.debug("==== DEBUG END ====")
+
+        # デバッグ用ログ
+        print(f"file_clearedの値: {file_cleared}")
 
         with get_db_connection() as conn:
             cursor = conn.cursor()
@@ -159,8 +178,15 @@ def edit(entry_id):
             cursor.execute("SELECT filename FROM diary WHERE id=?", (entry_id,))
             existing_filename = cursor.fetchone()[0]
 
-            # ファイル保存処理を共通関数にまとめる
-            filename = save_file(file, default_filename=existing_filename)
+            # ファイル選択が解除された場合は、filenameをNoneにする
+            if file_cleared == "true":
+                logger.debug(
+                    "ファイル選択が解除されました。データベースのfilenameをクリアします。"
+                )
+                filename = "default.jpg"
+            else:
+                # ファイル保存処理を実行
+                filename = save_file(file, default_filename=existing_filename)
 
             # データベースの更新処理
             cursor.execute(
@@ -172,6 +198,7 @@ def edit(entry_id):
         return redirect(url_for("detail", entry_id=entry_id))
 
     else:
+        # 編集画面の初期表示時にエントリを取得
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM diary WHERE id=?", (entry_id,))

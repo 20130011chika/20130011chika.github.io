@@ -1,0 +1,44 @@
+/* スマホ表示向けにカードやボタンを大きくする */
+@media (max-width: 768px) {
+    .diary-card {
+        font-size: 1.2em;
+        padding: 20px;
+        margin: 10px auto;
+        width: 95%;
+    }
+
+    .btn {
+        font-size: 1.1em;
+        padding: 10px 20px;
+        width: 100%;
+    }
+}
+
+/* 背景とカードの色設定 */
+body {
+    background-color: #E8DCCB;
+    /* 少し明るめのベージュ系 */
+}
+
+/* カードの色 */
+.diary-card,
+.card {
+    background-color: #FBF7F2;
+    /* やわらかいアイボリー */
+    border: none;
+    /* カードの境界線を消す */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    /* 柔らかな影で浮き上がり感を追加 */
+    border-radius: 10px;
+    /* カードの角を丸く */
+    padding: 20px;
+}
+
+/* 共通のカード色 */
+.card-background {
+    background-color: #FBF7F2;
+    /* ホーム画面のカード色に合わせる */
+    min-height: 100vh;
+    /* 画面全体を覆う */
+    padding: 20px;
+}

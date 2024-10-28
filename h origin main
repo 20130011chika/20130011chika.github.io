@@ -1,0 +1,25 @@
+[33mcommit 81681ba81521bc08230cb8b9bca1bebd4d9b9735[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m
+Author: 20130011chika <rikutonikoru@gmail.com>
+Date:   Sat Oct 26 17:04:18 2024 +0900
+
+    10/26 Webサーバー上で動作するようになった。スマホからの動画アップロード保存がうまくいっていない。
+
+[33mcommit 04a2364012ada75ea88ab7de28bbb48f217eb5a0[m[33m ([m[1;31morigin/main[m[33m)[m
+Author: 20130011chika <rikutonikoru@gmail.com>
+Date:   Mon Oct 21 18:17:55 2024 +0900
+
+    Heroku deploy
+
+[33mcommit 2114c385c2958bd7b91ea0f2ee5a05d70acf4289[m
+Author: 20130011chika <rikutonikoru@gmail.com>
+Date:   Mon Oct 21 16:55:06 2024 +0900
+
+    初回コミット
+
+[33mcommit f787342c7ee16aba75115375267e938aa8eb0cad[m
+Author: 20130011chika <rikutonikoru@gmail.com>
+Date:   Mon Oct 21 16:40:03 2024 +0900
+
+    Create README.md
+    
+    add README.md

@@ -2,8 +2,9 @@
 <html lang="ja">
 
 <head>
-    <title>登録/編集 - 日記アプリ</title>
+    <title>登録/編集 - Calm Diary</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <style>
         .thumbnail {
             width: 100px;
@@ -14,22 +15,10 @@
             margin-top: 10px;
         }
 
-        /* スマホ画面の余白を減らす */
-        @media (max-width: 576px) {
-            .card {
-                margin-left: 5px;
-                margin-right: 5px;
-            }
-
-            .container {
-                padding-left: 5px;
-                padding-right: 5px;
-            }
-        }
     </style>
 </head>
 
-<body>
+<body class="card-background">
     <div class="container mt-4">
         <!-- 重複する日付がある場合、保存ボタン押下時にエラーメッセージを表示 -->
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -41,6 +30,8 @@
         {% endwith %}
 
         <form method="POST" action="{% if entry %}{{ url_for('edit', entry_id=entry[0]) }}{% else %}{{ url_for('add') }}{% endif %}" enctype="multipart/form-data">
+            <input type="hidden" id="file-cleared" name="file_cleared" value="false">
+
             <div class="mb-3">
                 <label for="date" class="form-label">日付</label>
                 <input type="date" class="form-control" name="date" value="{{ entry[1] if entry else today }}" required>
@@ -52,20 +43,20 @@
             </div>
             <div class="mb-3">
                 <label for="file-input" class="form-label">画像または動画</label>
-                <input class="form-control" type="file" name="file" id="file-input" accept="image/*,video/*"
-                    style="display: none;" onchange="previewFile()">
+                <input class="form-control" type="file" name="file" id="file-input" data-entry-filename="{{ entry[3] }}" accept="image/*,video/*"
+                    style="display: none;" onchange="checkFileSize(event)">
 
                 <!-- ボタンを横一行に並べる -->
                 <div class="d-flex">
                     <label for="file-input" class="btn btn-outline-primary me-2">
                         ファイルを選択
                     </label>
-                    {% if entry and entry[3] %}
-                    <button type="button" class="btn btn-danger btn-sm" id="clear-file-btn"
-                        onclick="clearFileSelection()">
+
+                    <button type="button" class="btn btn-danger btn-sm" id="clear-file-container"
+                        onclick="clearFileSelection()" style="{% if entry and entry[3] and entry[3] != 'default.jpg' %}display: block;{% else %}display: none;{% endif %}">
                         画像選択を解除
                     </button>
-                    {% endif %}
+                    
                 </div>
                 <!-- ファイルが選択されていない場合に表示するメッセージ -->
                 <p id="file-message" style="color: red; display:none;">
@@ -74,7 +65,7 @@
 
                 <!-- プレビューエリア -->
                 <div id="preview-area">
-                    {% if entry and entry[3] %}
+                    {% if entry and entry[3] and entry[3] != 'default.jpg' %}
                     {% if entry[3].endswith('.mp4') %}
                     <video class="thumbnail" controls muted>
                         <source src="{{ url_for('uploaded_file', filename=entry[3]) }}" type="video/mp4">
@@ -103,21 +94,62 @@
 
     </div>
     <script>
+        // よく使う要素を一度に取得するヘルパー関数
+        function getFileElements() {
+
+            const elements = {
+                input: document.getElementById('file-input'),
+                previewArea: document.getElementById('preview-area'),
+                fileMessage: document.getElementById('file-message'),
+                clearButtonContainer: document.getElementById('clear-file-container'),
+                clearedField: document.getElementById('file-cleared')
+            };
+            
+            return elements;
+        }
+    
+        // メッセージとクリアボタンの表示制御を行う関数
+        function showMessage(message, showClearButton = false) {
+            const { fileMessage, clearButtonContainer } = getFileElements();
+            
+            if (fileMessage) {
+            fileMessage.style.display = 'block';
+            fileMessage.textContent = message;
+            console.log(`showMessage - メッセージ: ${message}, fileMessage.style.display: ${fileMessage.style.display}`);
+            }
+            
+            // clearButtonContainerがnullでない場合のみ実行
+            if (clearButtonContainer) {
+                clearButtonContainer.style.display = showClearButton ? 'block' : 'none';
+                console.log(`showMessage - クリアボタン表示状態: ${clearButtonContainer.style.display}`);
+            }
+        }
+    
+        // プレビューエリアをクリアし、メッセージを表示する関数
+        function clearPreview() {
+            const { previewArea, clearButtonContainer } = getFileElements();
+            if (previewArea) {
+            previewArea.innerHTML = ''; // プレビューエリアをクリア
+            }
+            //fileMessage.style.display = 'none';
+            if (clearButtonContainer) {
+                clearButtonContainer.style.display = 'none'; // 解除ボタンを非表示にする
+            }
+            showMessage("選択されていません",false);
+        }
+    
         // ファイルのプレビューを表示する関数
         function previewFile() {
-            const input = document.getElementById('file-input');
-            const previewArea = document.getElementById('preview-area');
-            const fileMessage = document.getElementById('file-message'); // メッセージ要素の取得
-            const clearFileContainer = document.getElementById('clear-file-container'); // 解除ボタンのコンテナ
-
-            // プレビューエリアをクリア
+            const { input, previewArea, clearButtonContainer,fileMessage, clearedField } = getFileElements();
+    
+            // プレビューエリアのリセット
             previewArea.innerHTML = '';
-
+    
             if (input.files && input.files[0]) {
                 const file = input.files[0];
                 const fileUrl = URL.createObjectURL(file);
-
-                // 選択されているファイルのタイプに応じてプレビューを表示
+    
+                // 画像もしくは動画をプレビューに追加
                 if (file.type.startsWith('image/')) {
                     const img = document.createElement('img');
                     img.src = fileUrl;
@@ -130,45 +162,101 @@
                     video.classList.add('thumbnail');
                     previewArea.appendChild(video);
                 }
-
-                // ファイルが選択されているので、メッセージを非表示にする
-                fileMessage.style.display = 'none';
-
-                // 解除ボタンを表示
-                if (clearFileContainer) {
-                    clearFileContainer.style.display = 'block';
+    
+                // プレビューが表示された場合の処理
+                if (fileMessage) {
+                    fileMessage.style.display = 'none';  // メッセージを非表示
+                    console.log("previewFile - ファイルが選択されたため、fileMessageを非表示");
                 }
+
+                if (clearButtonContainer) {
+                    clearButtonContainer.style.display = 'block'; // 解除ボタンを表示
+                    console.log("previewFile - クリアボタンを表示");
+                }
+
+                clearedField.value = 'false';  // ファイル選択がされたので、クリアフラグを解除
+                console.log(`previewFile - clearedField.value: ${clearedField.value}`);
             } else {
-                // ファイルが選択されていない場合のメッセージ表示
-                fileMessage.style.display = 'block';
+                showMessage("選択されていません", false);  // ファイル未選択メッセージ
+            }
+        }
+    
+        // ファイルサイズを確認する関数（2MB以下のファイルのみ許可）
+        function checkFileSize(event) {
+            const file = event.target.files[0];
+            if (file && file.size > 3 * 1024 * 1024) { // 3MBを超えていたら
+                alert("ファイルサイズは3MB以下にしてください。");
+                event.target.value = ""; // ファイル選択をクリア
+                showMessage("ファイルサイズが大きすぎます", false);
+            } else {
+                previewFile(); // サイズが問題なければプレビュー関数を呼び出し
+            }
+        }
+    
+        // 画像や動画の選択を解除する関数
+        function clearFileSelection() {
+            const { input, clearedField, previewArea, clearButtonContainer, fileMessage } = getFileElements();
+            
+            input.value = '';  // ファイル選択をクリア
+            previewArea.innerHTML = '';  // プレビューエリアをクリア
+            clearedField.value = 'true';  // hiddenフィールドの値を更新
+            console.log(`clearFileSelection - clearedField.value: ${clearedField.value}`);
 
-                // 解除ボタンを非表示にする
-                if (clearFileContainer) {
-                    clearFileContainer.style.display = 'none';
-                }
+            if (clearButtonContainer) {
+                clearButtonContainer.style.display = 'none'; // 解除ボタンを非表示
+                console.log("clearFileSelection - クリアボタンを非表示に設定");
+            }
+            
+            // 画像選択を解除した後に「選択されていません」メッセージを表示
+            if (fileMessage) {
+                fileMessage.style.display = 'block';
+                fileMessage.textContent = "選択されていません";
+                console.log("clearFileSelection - fileMessageを表示");
             }
         }
 
-        // 画像や動画の選択を解除する関数
-        function clearFileSelection() {
-            const input = document.getElementById('file-input');
-            const previewArea = document.getElementById('preview-area');
-            const fileMessage = document.getElementById('file-message'); // メッセージ要素の取得
-            const clearFileContainer = document.getElementById('clear-file-container'); // 解除ボタンのコンテナ
+        // ファイル選択の際にclearFileSelectionを一度リセットしてから新しいファイルを読み込む
+        document.getElementById('file-input').addEventListener('change', () => {
+            previewFile(); // 新しいファイルのプレビューを表示
+        });
 
-            // ファイル選択をクリア
-            input.value = '';
+        // ページ読み込み時に、ファイルが未選択であれば「選択されていません」というメッセージを表示する
+        document.addEventListener('DOMContentLoaded', () => {
+            const { input, clearButtonContainer, fileMessage, previewArea } = getFileElements();
 
-            // プレビューエリアをクリア
+            // プレビューエリアのリセット
             previewArea.innerHTML = '';
 
-            // 「選択されていません」メッセージを表示
-            fileMessage.style.display = 'block';
+            // サーバー側で画像が未選択（Noneや空文字）の場合
+            if (!input.dataset.entryFilename || input.dataset.entryFilename === 'default.jpg' || input.dataset.entryFilename === 'None') {
+                // default.jpgまたはNoneの場合は「選択されていません」のメッセージを表示
+                showMessage("選択されていません", false);
+                console.log("DOMContentLoaded - 画像が未選択のためメッセージを表示、クリアボタン非表示");
+                if (clearButtonContainer) {
+                    clearButtonContainer.style.display = 'none';
+                }
+            } else {
+                // 画像が選択されている場合のみプレビュー画像を表示
+                if (fileMessage) {
+                    fileMessage.style.display = 'none';
+                    console.log("DOMContentLoaded - ファイルが選択されているため、fileMessageを非表示");
+                }
+                if (clearButtonContainer) {
+                    clearButtonContainer.style.display = 'block';
+                    console.log("DOMContentLoaded - クリアボタンを表示");
+                }
 
-            // 解除ボタンを非表示にする
-            clearFileContainer.style.display = 'none';
-        }
+                // プレビュー画像を表示
+                const img = document.createElement('img');
+                img.src = `{{ url_for('uploaded_file', filename='') }}${input.dataset.entryFilename}`;
+                img.classList.add('thumbnail');
+                previewArea.appendChild(img);
+                console.log("DOMContentLoaded - プレビュー画像を表示");
+            }
+        });
+        
     </script>
+    
 </body>
 
 </html>
