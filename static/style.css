@@ -42,3 +42,10 @@ body {
     /* 画面全体を覆う */
     padding: 20px;
 }
+
+.entry-content {
+    word-break: break-word;
+    /* 長い単語が見切れずに改行される */
+    white-space: normal;
+    /* テキストが折り返される */
+}

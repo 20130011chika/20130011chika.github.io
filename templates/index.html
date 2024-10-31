@@ -48,28 +48,54 @@
             max-height: 100vh;
             overflow-y: auto;
         }
+
+        /* 中央表示用スタイル */
+        .centered-message {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 60vh; /* エリアの縦位置調整 */
+            text-align: center;
+        }
     </style>
 </head>
 
 <body>
-     <div class="container mt-4">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <!-- 年表示を左側に配置 -->
-            <h2>{% if latest_year %}
-                {{ latest_year }}
-                {% endif %}</h2>
+    <div class="container mt-4">
+        <!-- フラッシュメッセージの表示 -->
+        {% with messages = get_flashed_messages(with_categories=True) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
 
-            <!-- ボタン類を右側に配置 -->
+        <!-- ログインユーザのメッセージ -->
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4 class="mb-0">{{ message }}</h4>
+            
+            <!-- ログアウトボタンと新しい日記ボタン -->
             <div>
+                <!-- リンク先の分岐（サーバかローカルか） -->
                 {% if use_cgi %}
-                    <a href="{{ url_for('add', _external=True).replace('tani-chika.com/', 'tani-chika.com/index.cgi/') }}"　class="btn btn-primary btn-sm me-2">＋ 新しい日記</a>
+                    <a href="{{ url_for('add', _external=True).replace('tani-chika.com/', 'tani-chika.com/index.cgi/') }}"　class="btn btn-primary btn-sm me-1">＋ 新しい日記</a>
                 {% else %}
-                    <a href="{{ url_for('add') }}" class="btn btn-primary btn-sm me-2">＋ 新しい日記</a>
+                    <a href="{{ url_for('add') }}" class="btn btn-primary btn-sm me-1">＋ 新しい日記</a>
                 {% endif %}
-                    <a href="{{ url_for('logout') }}" class="btn btn-secondary btn-sm ms-2">ログアウト</a>
+                <a href="{{ url_for('logout') }}" class="btn btn-secondary btn-sm me-1">ログアウト</a>            
             </div>
         </div>
-
+        <!-- 日記がない場合のメッセージ -->
+        {% if no_entries %}
+        <div class="centered-message">
+            <h3>新しい日記を追加しましょう 😊</h3>
+        </div>
+        {% else %}
+        <!-- 日記がある場合のレイアウト（元のレイアウトに戻します） -->
         <div class="row">
             <div class="col-12">
                 {% for entry in entries %}
@@ -89,8 +115,8 @@
                     {% endif %}
 
                     <div class="card-body">
-                        <h5 class="card-title">{{ entry[1] }}</h5>
-                        <p class="card-text text-truncate">{{ entry[2] }}</p>
+                        <h5 class="card-title">{{ entry[1] }} ({{ entry[4]}})</h5>
+                        <p class="card-text entry-content">{{ entry[2] }}</p>
 
                         <div class="d-flex mt-2">
                             <a href="{{ url_for('detail', entry_id=entry[0]) }}"
@@ -106,6 +132,7 @@
                 {% endfor %}
             </div>
         </div>
+        {% endif %}
     </div>
 
     <script>

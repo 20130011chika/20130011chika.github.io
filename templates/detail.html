@@ -18,8 +18,8 @@
 
 <body class="card-background">
     <div class="container mt-4">
-        <h2>{{ formatted_date or '日付が未設定です' }}</h2> <!-- フォーマット済みの日付を表示 -->
-        <p>{{ entry[2] }}</p> <!-- 日記の内容を表示 -->
+        <h2>{{ entry[1] }} ({{ entry[5] }})</h2>
+        <p class="card-text entry-content">{{ entry[2] }}</p> <!-- 日記の内容を表示 -->
 
         <!-- ファイルが存在する場合にサムネイルを表示 -->
         {% if entry[3] and entry[3] != 'default.jpg' %}

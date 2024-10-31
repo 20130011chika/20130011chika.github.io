@@ -4,89 +4,112 @@ from flask import (
     request,
     redirect,
     url_for,
-    session,
     flash,
     send_from_directory,
+    session,
+    jsonify,
 )
-from datetime import datetime
-from datetime import datetime, timedelta
+from datetime import datetime, date
 import os
-from google.oauth2 import id_token
-from google_auth_oauthlib.flow import Flow
-import google.auth.transport.requests
 from werkzeug.utils import secure_filename
+from werkzeug.security import generate_password_hash, check_password_hash
 import sqlite3
 import logging
-import requests
-
-# Flaskアプリケーションのインスタンスを作成
-app = Flask(__name__)
-os.environ["IS_PRODUCTION"] = "1"  # 環境変数を設定
-app.config["IS_PRODUCTION"] = os.getenv("IS_PRODUCTION") == "1"
-
-app.secret_key = os.getenv(
-    "FLASK_SECRET_KEY", "default_secret_key"
-)  # フラッシュメッセージ用の秘密鍵（環境変数が見つからない場合はデフォルト値を使用）
-
-app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(
-    minutes=30
-)  # セッションの有効期限を30分に設定
-
-
-@app.before_request
-def make_session_permanent():
-    session.permanent = True  # リクエストごとにセッションを永続化
-
-
-# 環境フラグを設定 (サーバーではCGI対応、ローカルではしない)
-app.config["USE_CGI"] = app.config["IS_PRODUCTION"]
-
+from functools import wraps
 import logging
 from logging.handlers import RotatingFileHandler
 
+
+# Flaskアプリケーションのインスタンスを作成
+app = Flask(__name__)
+
+
+# ログインページ表示とログイン処理
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        username = request.form["username"]
+        password = request.form["password"]
+
+        # データベースからユーザ情報を取得
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
+            user = cursor.fetchone()
+
+            # ユーザが存在し、パスワードが一致するか確認
+            if user and check_password_hash(user[2], password):
+                session["user_id"] = user[0]  # ユーザIDをセッションに保存
+                return redirect(url_for("index"))
+            else:
+                flash("ユーザIDまたはパスワードが正しくありません。", "danger")
+
+    return render_template("login.html")
+
+
+# ログアウト処理
+@app.route("/logout")
+def logout():
+    session.pop("user_id", None)  # セッションからユーザIDを削除
+    flash("ログアウトしました。", "info")
+    return redirect(url_for("login"))
+
+
+# ユーザがログインしているかどうかを確認する関数
+def login_required(func):
+    @wraps(func)
+    def decorated_view(*args, **kwargs):
+        if "user_id" not in session:
+            return redirect(url_for("login"))
+        return func(*args, **kwargs)
+
+    return decorated_view
+
+
+# 新規ユーザの登録
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if request.method == "POST":
+        username = request.form["username"]
+        password = request.form["password"]
+        password_hash = generate_password_hash(password, method="pbkdf2:sha256")
+
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            try:
+                cursor.execute(
+                    "INSERT INTO users (username, password_hash) VALUES (?, ?)",
+                    (username, password_hash),
+                )
+                conn.commit()
+                flash("新規登録が完了しました！", "success")
+                return redirect(url_for("login"))
+            except sqlite3.IntegrityError:
+                flash("このユーザIDは既に使用されています。", "danger")
+
+    return render_template("register.html")
+
+
 # ロギングの設定
-logging.basicConfig(
-    filename="/home/tani-chika/log/app_debug.log",  # ログファイルのパスを指定
-    level=logging.DEBUG,  # DEBUGレベルのログを記録
-    format="%(asctime)s - %(levelname)s - %(message)s",
-)
-logging.debug(f"IS_PRODUCTION (環境変数): {os.getenv('IS_PRODUCTION')}")
-logging.debug(f"IS_PRODUCTION (app.config): {app.config['IS_PRODUCTION']}")
-logging.debug("Application has started")
+logging.basicConfig(level=logging.DEBUG)  # DEBUGレベルのログを表示する
 logger = logging.getLogger(__name__)
 
-# Google OAuthのクライアント設定ファイルを指定
-client_secrets_file = os.path.join(os.path.dirname(__file__), "client_secret.json")
-
-
-@app.route("/cgi-bin/login")
-def login():
-    if not app.config["IS_PRODUCTION"]:
-        return "Googleログインは本番環境でのみ有効です。", 403
-
-    flow = Flow.from_client_secrets_file(
-        client_secrets_file=client_secrets_file,
-        scopes=[
-            "https://www.googleapis.com/auth/userinfo.profile",
-            "https://www.googleapis.com/auth/userinfo.email",
-        ],
-        redirect_uri="https://tani-chika.com/cgi-bin/callback",
-    )
-    authorization_url, state = flow.authorization_url()
-    session["state"] = state
-
-    # セッション情報をログに出力
-    logging.debug(f"Generated authorization URL: {authorization_url}")
-    logging.debug(f"Session state set to: {session.get('state')}")  # ここで確認
-
-    return redirect(authorization_url)
-
+# 環境フラグを設定 (サーバーではCGI対応、ローカルではしない)
+if "tani-chika.com" in os.getenv("HOSTNAME", ""):
+    app.config["USE_CGI"] = True
+else:
+    app.config["USE_CGI"] = False
 
 # ログ設定
 if not app.debug:
     handler = RotatingFileHandler("error.log", maxBytes=10000, backupCount=1)
     handler.setLevel(logging.ERROR)
     app.logger.addHandler(handler)
+
+app.secret_key = "your_secret_key"  # フラッシュメッセージ用の秘密鍵
+
+# 曜日を取得しやすいようにWEEKDAYS配列を定義
+WEEKDAYS = ["月", "火", "水", "木", "金", "土", "日"]
 
 # アップロード可能な拡張子を定義
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "mp4"}
@@ -129,12 +152,24 @@ def get_db_connection():
 def init_db():
     with get_db_connection() as conn:
         cursor = conn.cursor()
+
+        # diaryテーブルの作成
         cursor.execute(
             """CREATE TABLE IF NOT EXISTS diary
                           (id INTEGER PRIMARY KEY AUTOINCREMENT, 
                           date TEXT UNIQUE, 
                           content TEXT, 
                           filename TEXT)"""
+        )
+
+        # usersテーブルの作成
+        cursor.execute(
+            """CREATE TABLE IF NOT EXISTS users (
+                   id INTEGER PRIMARY KEY AUTOINCREMENT,
+                   username TEXT NOT NULL UNIQUE,
+                   password_hash TEXT NOT NULL,
+                   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+               )"""
         )
         conn.commit()
 
@@ -144,60 +179,56 @@ def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
-from functools import wraps
-
-
-def login_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if (
-            "email" not in session
-        ):  # セッションにメールアドレスがない場合はログインページにリダイレクト
-            return redirect(url_for("login"))
-        return f(*args, **kwargs)
-
-    return decorated_function
-
-
 # ホーム画面：各日付のサムネイルを表示
 @app.route("/")
 @login_required
 def index():
-    # デバッグメッセージ
-    print("アクセス：indexページに到達しました")
+    user_id = session["user_id"]
+    today = date.today().isoformat()
 
-    # サーバー環境で、ユーザーが未ログインの場合、ログインページにリダイレクト
-    if app.config["IS_PRODUCTION"]:
-        print("サーバーモードで実行されています")
-        if "user_id" not in session:
-            print(
-                "ユーザーがログインしていないため、ログインページにリダイレクトします"
-            )
-            return redirect(url_for("login"))
-        else:
-            print(f"ログイン済みユーザー: {session['user_id']}")
-    else:
-        print("ローカルモードで実行されています")
-
-    # 日記データの取得
     with get_db_connection() as conn:
         cursor = conn.cursor()
+
+        # ユーザ情報を取得
+        cursor.execute("SELECT username FROM users WHERE id = ?", (user_id,))
+        username = cursor.fetchone()[0]
+
+        # 本日の日記があるか確認
         cursor.execute(
-            "SELECT id, date, content, filename FROM diary ORDER BY date DESC"
+            "SELECT 1 FROM diary WHERE date = ? AND user_id = ?", (today, user_id)
+        )
+        entry_exists = cursor.fetchone() is not None
+
+        # メッセージを設定
+        if entry_exists:
+            message = f"今日も登録ありがとう 😊"
+        else:
+            message = f"今日もお疲れさまです 😊"
+
+        # 日記一覧の取得と曜日の追加
+        cursor.execute(
+            "SELECT id, date, content, filename FROM diary WHERE user_id=? ORDER BY date DESC",
+            (user_id,),
         )
         entries = cursor.fetchall()
 
-        # 最新の日記の年号を取得
-        if entries:
-            latest_year = entries[0][1][:4]  # 日付から最初の4文字（年）を取得
-        else:
-            latest_year = None
+        # 日記がない場合のフラグを設定
+        no_entries = len(entries) == 0
+
+        # 曜日を追加したタプル形式のリストを作成
+        formatted_entries = []
+        for entry in entries:
+            entry_date = datetime.strptime(entry[1], "%Y-%m-%d")
+            weekday = WEEKDAYS[entry_date.weekday()]
+            formatted_entry = entry + (weekday,)  # タプルに weekday を追加
+            formatted_entries.append(formatted_entry)
 
     return render_template(
         "index.html",
-        entries=entries,
-        latest_year=latest_year,
+        entries=formatted_entries,  # formatted_entriesを渡す
         use_cgi=app.config["USE_CGI"],
+        message=message,
+        no_entries=no_entries,
     )
 
 
@@ -217,17 +248,16 @@ def detail(entry_id):
         if entry is None:
             return "日記が見つかりません", 404
 
-        # 日付のフォーマットを行う
-        if entry and entry[1]:  # entry[1] が日付フィールド
-            formatted_date = datetime.strptime(entry[1], "%Y-%m-%d").strftime(
-                "%Y年%m月%d日"
-            )
-        else:
-            formatted_date = None
+        # 日付から曜日を取得してタプル形式で weekday を追加
+        entry_date = datetime.strptime(entry[1], "%Y-%m-%d")
+        weekday = WEEKDAYS[entry_date.weekday()]
+
+        # タプルに weekday を追加
+        entry = entry + (weekday,)
+
     return render_template(
         "detail.html",
         entry=entry,
-        formatted_date=formatted_date,
         use_cgi=app.config["USE_CGI"],
     )
 
@@ -303,12 +333,15 @@ def add():
         date = request.form["date"]
         content = request.form["content"]
         file = request.files.get("file")  # 画像または動画ファイル
+        user_id = session["user_id"]
 
         with get_db_connection() as conn:
             cursor = conn.cursor()
 
             # 同じ日付がすでに存在するか確認
-            cursor.execute("SELECT * FROM diary WHERE date=?", (date,))
+            cursor.execute(
+                "SELECT * FROM diary WHERE date=? AND user_id=?", (date, user_id)
+            )
             existing_entry = cursor.fetchone()
             if existing_entry:
                 flash("この日付の日記は既に存在します。")
@@ -319,8 +352,8 @@ def add():
 
             # 新規日記をデータベースに追加
             cursor.execute(
-                "INSERT INTO diary (date, content, filename) VALUES (?, ?, ?)",
-                (date, content, filename if filename else None),
+                "INSERT INTO diary (date, content, filename, user_id) VALUES (?, ?, ?, ?)",
+                (date, content, filename, user_id if filename else None),
             )  # ファイルが選択されていない場合はNoneを設定
 
             conn.commit()
@@ -349,52 +382,9 @@ def delete(entry_id):
     return redirect(url_for("index"))
 
 
-@app.route("/cgi-bin/callback")
-def callback():
-    logging.debug("callbackルートに到達しました")
-    if not app.config["IS_PRODUCTION"]:
-        return "Googleログインは本番環境でのみ有効です。", 403
-
-    flow = Flow.from_client_secrets_file(
-        client_secrets_file=client_secrets_file,
-        scopes=[
-            "https://www.googleapis.com/auth/userinfo.profile",
-            "https://www.googleapis.com/auth/userinfo.email",
-        ],
-        redirect_uri="https://tani-chika.com/cgi-bin/callback",
-    )
-
-    logging.debug(f"リクエストのstate: {request.args.get('state')}", flush=True)
-    logging.debug(f"セッションのstate: {session.get('state')}", flush=True)
-
-    flow.fetch_token(authorization_response=request.url)
-    if session.get("state") != request.args.get("state"):
-        return "リクエストの状態が一致しません。", 403
-
-    credentials = flow.credentials
-    request_session = requests.session()
-    token_request = google.auth.transport.requests.Request(session=request_session)
-
-    try:
-        id_info = id_token.verify_oauth2_token(credentials._id_token, token_request)
-        session["email"] = id_info.get("email")  # メールアドレスをセッションに保存
-    except ValueError as e:
-        print(f"トークンの検証に失敗しました: {e}")
-        return "トークンの検証に失敗しました。", 403
-
-    return redirect(url_for("index"))
-
-
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect(url_for("index"))
-
-
 # 404エラーハンドリングのコード
 @app.errorhandler(404)
 def page_not_found(error):
-    logging.error(f"404エラー: リクエストされたURLは {request.url}")
     return render_template("404.html", error=error), 404
 
 
@@ -405,6 +395,6 @@ def internal_server_error(error):
 
 
 # アプリケーションの開始前にデータベースを初期化
-# if __name__ == "__main__":
-# init_db()
-# app.run(debug=True, use_reloader=False)  # 本番環境では削除またはコメントアウト
+if __name__ == "__main__":
+    init_db()
+    # app.run(debug=True, use_reloader=False)  # 本番環境では削除またはコメントアウト
