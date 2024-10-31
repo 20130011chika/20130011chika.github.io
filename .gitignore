@@ -1,1 +1,4 @@
 .env
+
+# .gitignore に追加
+client_secret.json
