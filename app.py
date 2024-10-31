@@ -4,38 +4,89 @@ from flask import (
     request,
     redirect,
     url_for,
+    session,
     flash,
     send_from_directory,
 )
 from datetime import datetime
+from datetime import datetime, timedelta
 import os
+from google.oauth2 import id_token
+from google_auth_oauthlib.flow import Flow
+import google.auth.transport.requests
 from werkzeug.utils import secure_filename
 import sqlite3
 import logging
-
-# ロギングの設定
-logging.basicConfig(level=logging.DEBUG)  # DEBUGレベルのログを表示する
-logger = logging.getLogger(__name__)
+import requests
 
 # Flaskアプリケーションのインスタンスを作成
 app = Flask(__name__)
+os.environ["IS_PRODUCTION"] = "1"  # 環境変数を設定
+app.config["IS_PRODUCTION"] = os.getenv("IS_PRODUCTION") == "1"
+
+app.secret_key = os.getenv(
+    "FLASK_SECRET_KEY", "default_secret_key"
+)  # フラッシュメッセージ用の秘密鍵（環境変数が見つからない場合はデフォルト値を使用）
+
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(
+    minutes=30
+)  # セッションの有効期限を30分に設定
+
+
+@app.before_request
+def make_session_permanent():
+    session.permanent = True  # リクエストごとにセッションを永続化
+
+
+# 環境フラグを設定 (サーバーではCGI対応、ローカルではしない)
+app.config["USE_CGI"] = app.config["IS_PRODUCTION"]
 
 import logging
 from logging.handlers import RotatingFileHandler
 
-# 環境フラグを設定 (サーバーではCGI対応、ローカルではしない)
-if "tani-chika.com" in os.getenv("HOSTNAME", ""):
-    app.config["USE_CGI"] = True
-else:
-    app.config["USE_CGI"] = False
+# ロギングの設定
+logging.basicConfig(
+    filename="/home/tani-chika/log/app_debug.log",  # ログファイルのパスを指定
+    level=logging.DEBUG,  # DEBUGレベルのログを記録
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
+logging.debug(f"IS_PRODUCTION (環境変数): {os.getenv('IS_PRODUCTION')}")
+logging.debug(f"IS_PRODUCTION (app.config): {app.config['IS_PRODUCTION']}")
+logging.debug("Application has started")
+logger = logging.getLogger(__name__)
+
+# Google OAuthのクライアント設定ファイルを指定
+client_secrets_file = os.path.join(os.path.dirname(__file__), "client_secret.json")
+
+
+@app.route("/cgi-bin/login")
+def login():
+    if not app.config["IS_PRODUCTION"]:
+        return "Googleログインは本番環境でのみ有効です。", 403
+
+    flow = Flow.from_client_secrets_file(
+        client_secrets_file=client_secrets_file,
+        scopes=[
+            "https://www.googleapis.com/auth/userinfo.profile",
+            "https://www.googleapis.com/auth/userinfo.email",
+        ],
+        redirect_uri="https://tani-chika.com/cgi-bin/callback",
+    )
+    authorization_url, state = flow.authorization_url()
+    session["state"] = state
+
+    # セッション情報をログに出力
+    logging.debug(f"Generated authorization URL: {authorization_url}")
+    logging.debug(f"Session state set to: {session.get('state')}")  # ここで確認
+
+    return redirect(authorization_url)
+
 
 # ログ設定
 if not app.debug:
     handler = RotatingFileHandler("error.log", maxBytes=10000, backupCount=1)
     handler.setLevel(logging.ERROR)
     app.logger.addHandler(handler)
-
-app.secret_key = "your_secret_key"  # フラッシュメッセージ用の秘密鍵
 
 # アップロード可能な拡張子を定義
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "mp4"}
@@ -93,9 +144,42 @@ def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
+from functools import wraps
+
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if (
+            "email" not in session
+        ):  # セッションにメールアドレスがない場合はログインページにリダイレクト
+            return redirect(url_for("login"))
+        return f(*args, **kwargs)
+
+    return decorated_function
+
+
 # ホーム画面：各日付のサムネイルを表示
 @app.route("/")
+@login_required
 def index():
+    # デバッグメッセージ
+    print("アクセス：indexページに到達しました")
+
+    # サーバー環境で、ユーザーが未ログインの場合、ログインページにリダイレクト
+    if app.config["IS_PRODUCTION"]:
+        print("サーバーモードで実行されています")
+        if "user_id" not in session:
+            print(
+                "ユーザーがログインしていないため、ログインページにリダイレクトします"
+            )
+            return redirect(url_for("login"))
+        else:
+            print(f"ログイン済みユーザー: {session['user_id']}")
+    else:
+        print("ローカルモードで実行されています")
+
+    # 日記データの取得
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -265,9 +349,52 @@ def delete(entry_id):
     return redirect(url_for("index"))
 
 
+@app.route("/cgi-bin/callback")
+def callback():
+    logging.debug("callbackルートに到達しました")
+    if not app.config["IS_PRODUCTION"]:
+        return "Googleログインは本番環境でのみ有効です。", 403
+
+    flow = Flow.from_client_secrets_file(
+        client_secrets_file=client_secrets_file,
+        scopes=[
+            "https://www.googleapis.com/auth/userinfo.profile",
+            "https://www.googleapis.com/auth/userinfo.email",
+        ],
+        redirect_uri="https://tani-chika.com/cgi-bin/callback",
+    )
+
+    logging.debug(f"リクエストのstate: {request.args.get('state')}", flush=True)
+    logging.debug(f"セッションのstate: {session.get('state')}", flush=True)
+
+    flow.fetch_token(authorization_response=request.url)
+    if session.get("state") != request.args.get("state"):
+        return "リクエストの状態が一致しません。", 403
+
+    credentials = flow.credentials
+    request_session = requests.session()
+    token_request = google.auth.transport.requests.Request(session=request_session)
+
+    try:
+        id_info = id_token.verify_oauth2_token(credentials._id_token, token_request)
+        session["email"] = id_info.get("email")  # メールアドレスをセッションに保存
+    except ValueError as e:
+        print(f"トークンの検証に失敗しました: {e}")
+        return "トークンの検証に失敗しました。", 403
+
+    return redirect(url_for("index"))
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("index"))
+
+
 # 404エラーハンドリングのコード
 @app.errorhandler(404)
 def page_not_found(error):
+    logging.error(f"404エラー: リクエストされたURLは {request.url}")
     return render_template("404.html", error=error), 404
 
 
@@ -278,6 +405,6 @@ def internal_server_error(error):
 
 
 # アプリケーションの開始前にデータベースを初期化
-if __name__ == "__main__":
-    init_db()
-    # app.run(debug=True, use_reloader=False)  # 本番環境では削除またはコメントアウト
+# if __name__ == "__main__":
+# init_db()
+# app.run(debug=True, use_reloader=False)  # 本番環境では削除またはコメントアウト

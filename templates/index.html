@@ -52,19 +52,22 @@
 </head>
 
 <body>
-    <p>ログインユーザー: {{ email }}</p>
-
-    <div class="container mt-4">
+     <div class="container mt-4">
         <div class="d-flex justify-content-between align-items-center mb-3">
+            <!-- 年表示を左側に配置 -->
             <h2>{% if latest_year %}
                 {{ latest_year }}
                 {% endif %}</h2>
-            <!-- リンク先の分岐（サーバかローカルか） -->
-            {% if use_cgi %}
-                <a href="{{ url_for('add', _external=True).replace('tani-chika.com/', 'tani-chika.com/index.cgi/') }}"　class="btn btn-primary btn-sm me-1">＋ 新しい日記</a>
-            {% else %}
-                <a href="{{ url_for('add') }}" class="btn btn-primary btn-sm me-1">＋ 新しい日記</a>
-            {% endif %}
+
+            <!-- ボタン類を右側に配置 -->
+            <div>
+                {% if use_cgi %}
+                    <a href="{{ url_for('add', _external=True).replace('tani-chika.com/', 'tani-chika.com/index.cgi/') }}"　class="btn btn-primary btn-sm me-2">＋ 新しい日記</a>
+                {% else %}
+                    <a href="{{ url_for('add') }}" class="btn btn-primary btn-sm me-2">＋ 新しい日記</a>
+                {% endif %}
+                    <a href="{{ url_for('logout') }}" class="btn btn-secondary btn-sm ms-2">ログアウト</a>
+            </div>
         </div>
 
         <div class="row">
